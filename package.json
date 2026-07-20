@@ -1,7 +1,7 @@
 {
   "name": "bing-webmaster-mcp",
-  "version": "1.2.0",
-  "description": "An MCP server for Bing Webmaster data, live SEO/AEO scanning, safe WordPress fix preparation, verification, and URL submission.",
+  "version": "2.0.0",
+  "description": "An open-source AI Search Operations MCP for Bing Webmaster data, AEO audits, approval-gated WordPress fixes, verification, and URL submission.",
   "private": true,
   "license": "MIT",
   "author": "TechDivar",
@@ -17,6 +17,8 @@
     "mcp",
     "bing-webmaster",
     "aeo",
+    "ai-search",
+    "geo",
     "seo",
     "wordpress",
     "codex",

@@ -11,7 +11,7 @@ const MAX_RETRY_DELAY_MS = 15_000;
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 " +
-  "Bing-Webmaster-AEO-MCP/1.2";
+  "Bing-Webmaster-AEO-MCP/2.0";
 
 export class WebScannerError extends Error {
   constructor(message) {
@@ -475,7 +475,7 @@ function retryDelayMs(response, attempt) {
 const defaultSleep = milliseconds =>
   new Promise(resolve => setTimeout(resolve, milliseconds));
 
-export async function scanPage(
+export async function fetchPageDocument(
   urlValue,
   {
     fetchImpl = globalThis.fetch,
@@ -532,14 +532,25 @@ export async function scanPage(
   }
 
   const html = await readHtmlBody(response);
-  return analyzeHtml(html, {
+  const context = {
     requestedUrl: requested.href,
     finalUrl: current.href,
     status: response.status,
     statusText: response.statusText,
     contentType,
     xRobotsTag: response.headers.get("x-robots-tag")
-  });
+  };
+
+  return {
+    html,
+    context,
+    scan: analyzeHtml(html, context)
+  };
+}
+
+export async function scanPage(urlValue, options = {}) {
+  const document = await fetchPageDocument(urlValue, options);
+  return document.scan;
 }
 
 export async function scanPages(

@@ -14,6 +14,7 @@ import {
 } from "./bing-client.mjs";
 import {
   WebScannerError,
+  fetchPageDocument,
   scanPage,
   scanPages
 } from "./web-scanner.mjs";
@@ -22,6 +23,22 @@ import {
   buildAeoFixPlan,
   prepareWordPressFixes
 } from "./aeo-fixer.mjs";
+import {
+  AiSearchAuditError,
+  analyzeAiReadability,
+  analyzeCitationReadiness,
+  analyzeEntityCoverage,
+  analyzeIntentCoverage,
+  auditAiSearch,
+  auditFreshness,
+  auditInternalLinks,
+  buildPageModel,
+  comparePageModels,
+  extractCitableChunks,
+  generateAiOverviewPreview,
+  prepareAeoAutofix,
+  recommendSchemas
+} from "./ai-search-auditor.mjs";
 
 const siteUrlSchema = z
   .url()
@@ -40,6 +57,28 @@ const limitSchema = z
   .optional()
   .default(100)
   .describe("Maximum rows to return, from 1 to 1000");
+
+const entitySchema = z.string().min(1).max(150);
+const intentSchema = z.enum([
+  "informational",
+  "commercial",
+  "comparison",
+  "troubleshooting",
+  "pricing",
+  "transactional"
+]);
+const candidateLinkSchema = z.object({
+  url: webUrlSchema.describe("Real internal page URL"),
+  title: z.string().min(1).max(300),
+  keywords: z.array(z.string().min(1).max(100)).max(20).optional().default([])
+});
+const auditOptionsSchema = {
+  primary_entity: entitySchema.optional(),
+  related_entities: z.array(entitySchema).max(100).optional().default([]),
+  expected_intents: z.array(intentSchema).max(6).optional().default([]),
+  candidate_links: z.array(candidateLinkSchema).max(500).optional().default([]),
+  current_year: z.number().int().min(1900).max(2200).optional()
+};
 
 const readOnlyAnnotations = {
   readOnlyHint: true,
@@ -69,13 +108,37 @@ function success(label, data) {
 function failure(error) {
   const message = error instanceof BingWebmasterError ||
     error instanceof WebScannerError ||
-    error instanceof AeoFixerError
+    error instanceof AeoFixerError ||
+    error instanceof AiSearchAuditError
     ? error.message
     : "The Bing Webmaster request failed unexpectedly.";
 
   return {
     isError: true,
     content: [{ type: "text", text: message }]
+  };
+}
+
+async function getPageModel(url) {
+  const document = await fetchPageDocument(url);
+  if (document.scan.http.status < 200 || document.scan.http.status >= 300) {
+    throw new AiSearchAuditError(
+      `The page returned HTTP ${document.scan.http.status}; AI-search content checks were skipped.`
+    );
+  }
+  return {
+    model: buildPageModel(document.html, document.scan.final_url),
+    technical_scan: document.scan
+  };
+}
+
+function normalizedAuditOptions(args) {
+  return {
+    primaryEntity: args.primary_entity,
+    relatedEntities: args.related_entities || [],
+    expectedIntents: args.expected_intents || [],
+    candidateLinks: args.candidate_links || [],
+    currentYear: args.current_year
   };
 }
 
@@ -128,10 +191,10 @@ function registerUrlReadTool(server, name, title, description, method) {
 
 export function createServer() {
   const server = new McpServer(
-    { name: "bing-webmaster", version: "1.2.0" },
+    { name: "bing-webmaster-aeo", version: "2.0.0" },
     {
       instructions:
-        "Bing tools call Bing's public Webmaster API; they do not reproduce the full dashboard URL Inspection SEO/GEO report. For AEO fixes, scan the page, call aeo_plan_page_fixes, read the latest post through a connected WordPress MCP, call aeo_prepare_wordpress_fixes, request approval before updating WordPress, recheck the public page, then submit it to Bing when requested. Never request or reveal API keys."
+        "Bing tools call Bing's public Webmaster API; they do not reproduce the full dashboard URL Inspection SEO/GEO report. AI-search audits are transparent heuristics, not predictions or guarantees about citations by ChatGPT, Copilot, Google, or Bing. For AEO fixes, audit the page, read the latest post through a connected WordPress MCP, prepare an exact diff, request approval before updating WordPress, recheck the public page, then submit it to Bing when requested. Never request or reveal API keys."
     }
   );
 
@@ -346,6 +409,225 @@ export function createServer() {
         themeRendersTitleH1: args.theme_renders_title_h1
       });
       return success("Prepared WordPress AEO fixes", result);
+    })
+  );
+
+  server.registerTool(
+    "aeo_audit_page",
+    {
+      title: "Complete AI-search page audit",
+      description: "Run AI readability, entity coverage, citation readiness, intent coverage, an extractive answer preview, citable chunks, internal linking, schema, and freshness checks on one public page.",
+      inputSchema: {
+        url: webUrlSchema.describe("Public webpage URL"),
+        ...auditOptionsSchema
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async args => {
+      const { model, technical_scan } = await getPageModel(args.url);
+      return success("Complete AI-search page audit", {
+        technical_scan,
+        audit: auditAiSearch(model, normalizedAuditOptions(args))
+      });
+    })
+  );
+
+  server.registerTool(
+    "aeo_ai_readability_audit",
+    {
+      title: "AI readability audit",
+      description: "Check whether a page gives a focused direct answer, clear definition, useful heading structure, readable sections, and restrained marketing language.",
+      inputSchema: { url: webUrlSchema.describe("Public webpage URL") },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ url }) => {
+      const { model } = await getPageModel(url);
+      return success("AI readability audit", analyzeAiReadability(model));
+    })
+  );
+
+  server.registerTool(
+    "aeo_entity_coverage",
+    {
+      title: "Entity coverage audit",
+      description: "Check a primary entity and an explicit list of related entities against the page. It also returns heuristically detected entities without inventing missing ones.",
+      inputSchema: {
+        url: webUrlSchema.describe("Public webpage URL"),
+        primary_entity: entitySchema.optional(),
+        related_entities: z.array(entitySchema).max(100).optional().default([])
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async args => {
+      const { model } = await getPageModel(args.url);
+      return success("Entity coverage audit", analyzeEntityCoverage(model, {
+        primaryEntity: args.primary_entity,
+        relatedEntities: args.related_entities
+      }));
+    })
+  );
+
+  server.registerTool(
+    "aeo_citation_readiness",
+    {
+      title: "Citation readiness audit",
+      description: "Score whether the page contains concise, structured, well-supported passages that are easy for humans and AI systems to extract. This is not a citation guarantee.",
+      inputSchema: { url: webUrlSchema.describe("Public webpage URL") },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ url }) => {
+      const { model } = await getPageModel(url);
+      return success("Citation readiness audit", analyzeCitationReadiness(model));
+    })
+  );
+
+  server.registerTool(
+    "aeo_intent_coverage",
+    {
+      title: "Search intent coverage",
+      description: "Detect informational, commercial, comparison, troubleshooting, pricing, and transactional intent signals and report any expected intents that are missing.",
+      inputSchema: {
+        url: webUrlSchema.describe("Public webpage URL"),
+        expected_intents: z.array(intentSchema).max(6).optional().default([])
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ url, expected_intents }) => {
+      const { model } = await getPageModel(url);
+      return success("Search intent coverage", analyzeIntentCoverage(model, expected_intents));
+    })
+  );
+
+  server.registerTool(
+    "aeo_compare_pages",
+    {
+      title: "Competitor topic gap",
+      description: "Compare one page with up to five public competitor pages and find heading topics competitors cover that the page does not. It does not copy competitor content.",
+      inputSchema: {
+        url: webUrlSchema.describe("Your public webpage URL"),
+        competitor_urls: z.array(webUrlSchema).min(1).max(5)
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ url, competitor_urls }) => {
+      const page = (await getPageModel(url)).model;
+      const competitors = [];
+      for (const competitorUrl of [...new Set(competitor_urls)]) {
+        competitors.push((await getPageModel(competitorUrl)).model);
+      }
+      return success("Competitor topic gap", comparePageModels(page, competitors));
+    })
+  );
+
+  server.registerTool(
+    "aeo_ai_overview_preview",
+    {
+      title: "Page-only AI answer preview",
+      description: "Build an extractive answer using only passages already on the page and report confidence based on page structure. It does not simulate a proprietary AI platform.",
+      inputSchema: { url: webUrlSchema.describe("Public webpage URL") },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ url }) => {
+      const { model } = await getPageModel(url);
+      return success("Page-only AI answer preview", generateAiOverviewPreview(model));
+    })
+  );
+
+  server.registerTool(
+    "aeo_extract_citable_chunks",
+    {
+      title: "Extract citable chunks",
+      description: "Find concise standalone definitions and factual passages on a page and explain a transparent heuristic score for each.",
+      inputSchema: {
+        url: webUrlSchema.describe("Public webpage URL"),
+        limit: z.number().int().min(1).max(50).optional().default(15)
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ url, limit }) => {
+      const { model } = await getPageModel(url);
+      return success("Citable page chunks", extractCitableChunks(model, limit));
+    })
+  );
+
+  server.registerTool(
+    "aeo_internal_link_opportunities",
+    {
+      title: "Internal link opportunities",
+      description: "Audit existing internal links and match page topics to a supplied inventory of real internal URLs. It never invents destination URLs.",
+      inputSchema: {
+        url: webUrlSchema.describe("Public webpage URL"),
+        candidate_links: z.array(candidateLinkSchema).max(500).optional().default([])
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ url, candidate_links }) => {
+      const { model } = await getPageModel(url);
+      return success("Internal link opportunities", auditInternalLinks(model, candidate_links));
+    })
+  );
+
+  server.registerTool(
+    "aeo_schema_recommendations",
+    {
+      title: "Schema audit and recommendations",
+      description: "Validate JSON-LD syntax, list existing schema types, and assess whether Article, BreadcrumbList, FAQPage, HowTo, Product, or Review markup fits the visible page.",
+      inputSchema: { url: webUrlSchema.describe("Public webpage URL") },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ url }) => {
+      const { model } = await getPageModel(url);
+      return success("Schema audit and recommendations", recommendSchemas(model));
+    })
+  );
+
+  server.registerTool(
+    "aeo_freshness_audit",
+    {
+      title: "Content freshness audit",
+      description: "Flag older years, relative time claims, pricing or limits, and dated screenshots for human verification. It does not declare flagged content incorrect.",
+      inputSchema: {
+        url: webUrlSchema.describe("Public webpage URL"),
+        current_year: z.number().int().min(1900).max(2200).optional()
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ url, current_year }) => {
+      const { model } = await getPageModel(url);
+      return success("Content freshness audit", auditFreshness(model, current_year));
+    })
+  );
+
+  server.registerTool(
+    "aeo_autofix_page",
+    {
+      title: "Prepare an approval-gated AEO autofix",
+      description: "Scan and audit a public page, then optionally apply exact caller-supplied replacements to the latest WordPress content in memory. Returns a diff and always requires approval; it never publishes.",
+      inputSchema: {
+        url: webUrlSchema.describe("Public webpage URL"),
+        ...auditOptionsSchema,
+        content_html: z.string().max(2 * 1024 * 1024).optional().describe("Latest WordPress post body HTML"),
+        proposed_changes: z.array(z.object({
+          find_html: z.string().min(1).max(200_000).describe("Exact unique HTML fragment from the latest post body"),
+          replace_html: z.string().max(200_000).describe("Approved replacement HTML fragment"),
+          reason: z.string().min(1).max(300)
+        })).max(20).optional().default([])
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async args => {
+      const { model, technical_scan } = await getPageModel(args.url);
+      const audit = auditAiSearch(model, normalizedAuditOptions(args));
+      const prepared_fix = prepareAeoAutofix({
+        contentHtml: args.content_html,
+        proposedChanges: args.proposed_changes
+      });
+      return success("Approval-gated AEO autofix package", {
+        page_url: model.page_url,
+        technical_scan,
+        audit,
+        prepared_fix
+      });
     })
   );
 

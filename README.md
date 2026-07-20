@@ -1,6 +1,6 @@
-# Bing Webmaster AEO MCP
+# AI Search Operations MCP for Bing Webmaster
 
-An open-source MCP server that helps marketers use Bing Webmaster data, find technical SEO/AEO problems, prepare safe WordPress fixes, verify the live page, and request a fresh Bing crawl from Codex.
+An open-source MCP server that helps marketers improve pages for human readers and AI search. It combines Bing Webmaster data, technical SEO scanning, AI-search content audits, approval-gated WordPress fix preparation, live verification, and Bing URL submission.
 
 No API key is stored in this repository.
 
@@ -10,7 +10,11 @@ No API key is stored in this repository.
 - Review rankings, crawl activity, crawl issues, sitemaps, and submission quota.
 - Scan one page or up to 20 pages for common SEO/AEO problems.
 - Find duplicate H1s, missing image alt text, metadata, canonical, robots, language, HTTP, and JSON-LD problems.
-- Turn every finding into a clear fix plan.
+- Audit AI readability, entity coverage, citation readiness, intent coverage, schema fit, internal links, and freshness.
+- Compare heading topics with public competitor pages.
+- Preview the answer that can be extracted using only the page's own words.
+- Find concise passages that are easier to quote or paraphrase accurately.
+- Turn every finding into a clear fix plan and exact before/after diff.
 - Prepare corrected WordPress HTML without publishing it automatically.
 - Recheck the live page after a fix.
 - Submit an approved URL or sitemap to Bing.
@@ -23,21 +27,28 @@ No API key is stored in this repository.
 
 > Scan these 10 URLs and group the AEO problems by priority.
 
+> Audit this page for AI readability, citation readiness, missing entities, intent gaps, schema, and freshness.
+
+> Compare this article with these three competitors and show only meaningful topic gaps.
+
+> Find internal-link opportunities using this list of published pages. Do not invent URLs.
+
 > Scan this WordPress article, prepare the safe fixes, show me the changes, update it after I approve, verify the live page, then submit it to Bing.
 
 ## How the automated workflow works
 
-1. `seo_scan_page` finds live-page problems.
-2. `aeo_plan_page_fixes` explains where and how each problem should be fixed.
-3. Codex reads the latest post through your connected WordPress MCP.
-4. `aeo_prepare_wordpress_fixes` prepares corrected content without publishing.
+1. `aeo_audit_page` runs the full technical and AI-search audit.
+2. Codex reads the latest post through your connected WordPress MCP.
+3. `aeo_autofix_page` applies only exact proposed replacements in memory and returns a before/after diff.
+4. The tool marks the package `approval_required: true` and does not publish.
 5. Codex shows the changes and requests approval before a WordPress write.
-6. `seo_recheck_page` verifies the public page after the update.
-7. `bing_submit_url` requests a fresh Bing crawl when you ask for it.
+6. After approval, the connected WordPress MCP updates the post.
+7. `seo_recheck_page` and the AEO audits verify the public result.
+8. `bing_submit_url` requests a fresh Bing crawl when you ask for it.
 
-The fixer will not invent image descriptions. Codex must supply meaningful alt text based on the image and its surrounding content. It also requires confirmation that the WordPress theme already renders the post title as the page H1 before changing content-body H1s to H2s.
+The fixer will not invent image descriptions, internal destination URLs, facts, prices, or competitor claims. Codex must supply proposed wording from reviewed source material. It also requires confirmation that the WordPress theme already renders the post title as the page H1 before changing content-body H1s to H2s.
 
-## The 18 MCP tools
+## The 30 MCP tools
 
 ### Bing Webmaster data
 
@@ -61,12 +72,39 @@ The fixer will not invent image descriptions. Codex must supply meaningful alt t
 - `aeo_plan_page_fixes`
 - `aeo_prepare_wordpress_fixes`
 
+### AI-search operations
+
+- `aeo_audit_page` — run all AI-search audits together
+- `aeo_ai_readability_audit` — direct answers, definitions, headings, structure, and marketing language
+- `aeo_entity_coverage` — check a primary entity and supplied related entities
+- `aeo_citation_readiness` — score extractable, structured, supported passages
+- `aeo_intent_coverage` — detect six common intent types and missing expected intents
+- `aeo_compare_pages` — compare visible heading topics with up to five competitors
+- `aeo_ai_overview_preview` — create a page-only extractive answer preview
+- `aeo_extract_citable_chunks` — find concise standalone definitions and facts
+- `aeo_internal_link_opportunities` — match content to a supplied inventory of real URLs
+- `aeo_schema_recommendations` — validate JSON-LD and assess schema fit
+- `aeo_freshness_audit` — flag dates, prices, limits, relative claims, and screenshots for review
+- `aeo_autofix_page` — prepare an exact diff and require approval; never publish
+
 ### Bing submissions
 
 - `bing_submit_url`
 - `bing_submit_sitemap`
 
-Submission tools are marked as write actions. The scanning and fix-preparation tools are read-only.
+Submission tools are marked as write actions. Audits and fix-preparation tools are read-only because they do not change the website.
+
+## Honest scoring and limitations
+
+The AI-search scores are transparent HTML and language-pattern heuristics. They are useful editorial signals, not secret access to an LLM or a guarantee that ChatGPT, Copilot, Google, or Bing will cite a page.
+
+- Entity gaps are measured against related entities you supply. Heuristically detected entities are labelled as such.
+- Internal-link suggestions come only from URLs you supply. The MCP does not invent destinations.
+- The answer preview extracts existing page passages. It does not simulate a proprietary AI answer.
+- Competitor gaps compare headings and topics. They are research leads, not instructions to copy text.
+- Freshness findings mean “verify this,” not “this is false.”
+- Schema suggestions must match visible content and current search-platform rules.
+- `aeo_autofix_page` prepares changes only. A connected WordPress MCP is needed to publish after human approval.
 
 ## Important Bing limitation
 

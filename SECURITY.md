@@ -15,6 +15,8 @@ The file is created with owner-only permissions. The server also redacts the key
 - Scanning and fix preparation are read-only.
 - Bing submissions are marked as write actions.
 - WordPress changes should be previewed and approved before a connected WordPress MCP writes them.
+- `aeo_autofix_page` never publishes. It applies only exact unique replacements in memory, returns a diff, and keeps `approval_required` true.
+- Autofix replacement fragments reject scripts, forms, inline event handlers, and `javascript:` URLs.
 - The scanner blocks local and private network addresses, nonstandard ports, oversized pages, and excessive redirects.
 - The fixer does not guess image alt text or remove `noindex` directives automatically.
 

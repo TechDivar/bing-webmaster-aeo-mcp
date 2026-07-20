@@ -36,6 +36,19 @@ test("serves tools over MCP stdio", async () => {
     assert.ok(names.includes("seo_recheck_page"));
     assert.ok(names.includes("aeo_plan_page_fixes"));
     assert.ok(names.includes("aeo_prepare_wordpress_fixes"));
+    assert.ok(names.includes("aeo_audit_page"));
+    assert.ok(names.includes("aeo_ai_readability_audit"));
+    assert.ok(names.includes("aeo_entity_coverage"));
+    assert.ok(names.includes("aeo_citation_readiness"));
+    assert.ok(names.includes("aeo_intent_coverage"));
+    assert.ok(names.includes("aeo_compare_pages"));
+    assert.ok(names.includes("aeo_ai_overview_preview"));
+    assert.ok(names.includes("aeo_extract_citable_chunks"));
+    assert.ok(names.includes("aeo_internal_link_opportunities"));
+    assert.ok(names.includes("aeo_schema_recommendations"));
+    assert.ok(names.includes("aeo_freshness_audit"));
+    assert.ok(names.includes("aeo_autofix_page"));
+    assert.equal(names.length, 30);
     assert.equal(names.includes("bing_get_url_info"), false);
 
     const submitTool = listed.tools.find(tool => tool.name === "bing_submit_url");
@@ -45,6 +58,9 @@ test("serves tools over MCP stdio", async () => {
       tool => tool.name === "aeo_prepare_wordpress_fixes"
     );
     assert.equal(prepareTool.annotations.readOnlyHint, true);
+
+    const autofixTool = listed.tools.find(tool => tool.name === "aeo_autofix_page");
+    assert.equal(autofixTool.annotations.readOnlyHint, true);
 
     const result = await client.callTool({ name: "bing_list_sites", arguments: {} });
     assert.equal(result.isError, true);
