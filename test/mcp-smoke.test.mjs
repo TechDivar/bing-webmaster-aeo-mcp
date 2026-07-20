@@ -51,6 +51,7 @@ test("serves tools over MCP stdio", async () => {
     assert.ok(names.includes("aeo_llms_txt_audit"));
     assert.ok(names.includes("aeo_internal_duplicate_check"));
     assert.ok(names.includes("aeo_multilang_schema_parity"));
+    assert.ok(names.includes("aeo_find_ai_traffic_opportunities"));
     assert.ok(names.includes("aeo_audit_page"));
     assert.ok(names.includes("aeo_ai_readability_audit"));
     assert.ok(names.includes("aeo_entity_coverage"));
@@ -63,7 +64,7 @@ test("serves tools over MCP stdio", async () => {
     assert.ok(names.includes("aeo_schema_recommendations"));
     assert.ok(names.includes("aeo_freshness_audit"));
     assert.ok(names.includes("aeo_autofix_page"));
-    assert.equal(names.length, 45);
+    assert.equal(names.length, 46);
 
     const submitTool = listed.tools.find(tool => tool.name === "bing_submit_url");
     assert.equal(submitTool.annotations.readOnlyHint, false);
@@ -83,6 +84,12 @@ test("serves tools over MCP stdio", async () => {
 
     const autofixTool = listed.tools.find(tool => tool.name === "aeo_autofix_page");
     assert.equal(autofixTool.annotations.readOnlyHint, true);
+
+    const opportunityTool = listed.tools.find(
+      tool => tool.name === "aeo_find_ai_traffic_opportunities"
+    );
+    assert.equal(opportunityTool.annotations.readOnlyHint, true);
+    assert.equal(opportunityTool.inputSchema.properties.ga4_rows.maxItems, 10_000);
 
     const result = await client.callTool({ name: "bing_list_sites", arguments: {} });
     assert.equal(result.isError, true);

@@ -37,6 +37,10 @@ import {
   checkMultilangSchemaParity
 } from "./aeo-catalog-audits.mjs";
 import {
+  AeoTrafficOpportunityError,
+  findAiTrafficOpportunities
+} from "./aeo-traffic-opportunities.mjs";
+import {
   AiSearchAuditError,
   analyzeAiReadability,
   analyzeCitationReadiness,
@@ -158,6 +162,7 @@ function failure(error) {
     error instanceof WebScannerError ||
     error instanceof AeoFixerError ||
     error instanceof AeoCatalogAuditError ||
+    error instanceof AeoTrafficOpportunityError ||
     error instanceof AiSearchAuditError
     ? error.message
     : "The Bing Webmaster request failed unexpectedly.";
@@ -240,10 +245,10 @@ function registerUrlReadTool(server, name, title, description, method) {
 
 export function createServer() {
   const server = new McpServer(
-    { name: "bing-webmaster-aeo", version: "2.2.0" },
+    { name: "bing-webmaster-aeo", version: "2.3.0" },
     {
       instructions:
-        "Bing tools call Bing's public Webmaster API; they do not reproduce the full dashboard URL Inspection SEO/GEO report. IndexNow uses a separate client and local key. AI-search audits are transparent heuristics, not predictions or guarantees about citations by ChatGPT, Copilot, Google, or Bing. For AEO fixes, audit the page, read the latest post through a connected WordPress MCP, prepare an exact diff, request approval before updating WordPress, recheck the public page, then submit it when requested. Never request or reveal Bing API keys or IndexNow keys."
+        "Bing tools call Bing's public Webmaster API; they do not reproduce the full dashboard URL Inspection SEO/GEO report. The AI-traffic opportunity tool compares Bing's top-page data with an aggregated GA4 CSV or aggregated GA4 rows and never requires a Google credential. IndexNow uses a separate client and local key. AI-search audits are transparent heuristics, not predictions or guarantees about citations by ChatGPT, Copilot, Google, or Bing. For AEO fixes, audit the page, read the latest post through a connected WordPress MCP, prepare an exact diff, request approval before updating WordPress, recheck the public page, then submit it when requested. Never request or reveal Bing API keys or IndexNow keys."
     }
   );
 
@@ -277,6 +282,105 @@ export function createServer() {
     "Top Bing pages",
     "Get clicks, impressions, and average positions for top pages.",
     "GetPageStats"
+  );
+
+  server.registerTool(
+    "aeo_find_ai_traffic_opportunities",
+    {
+      title: "Find high-impression, low-AI-traffic pages",
+      description: "Pull Bing's official top-page statistics and match them with an aggregated GA4 CSV or GA4 rows. Returns pages with high Bing impressions but low identifiable AI-referral traffic. GA4 data stays in this local MCP process.",
+      inputSchema: {
+        site_url: siteUrlSchema,
+        ga4_csv: z
+          .string()
+          .max(2 * 1024 * 1024)
+          .optional()
+          .describe("Optional GA4 CSV text with a page column, a traffic metric such as Sessions, and normally Session source or Page referrer"),
+        ga4_rows: z
+          .array(
+            z.object({
+              page: z
+                .string()
+                .trim()
+                .min(1)
+                .max(4096)
+                .describe("Page path such as /blog/example/ or a same-site absolute URL"),
+              source: z
+                .string()
+                .trim()
+                .max(500)
+                .optional()
+                .describe("Aggregated traffic source or referrer, such as chatgpt.com"),
+              traffic: z
+                .number()
+                .nonnegative()
+                .describe("Aggregated sessions, users, or views for this page and source")
+            })
+          )
+          .max(10_000)
+          .optional()
+          .default([])
+          .describe("Optional aggregated GA4 rows; use this instead of ga4_csv"),
+        ga4_rows_are_ai_filtered: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Set true only when every supplied GA4 row is already filtered to AI-referral traffic"),
+        ga4_metric_name: z
+          .string()
+          .trim()
+          .min(1)
+          .max(100)
+          .optional()
+          .default("Sessions")
+          .describe("Metric label for structured GA4 rows, such as Sessions"),
+        additional_ai_sources: z
+          .array(z.string().trim().min(1).max(200))
+          .max(50)
+          .optional()
+          .default([])
+          .describe("Optional extra AI referral domains to recognize"),
+        minimum_bing_impressions: z
+          .number()
+          .nonnegative()
+          .optional()
+          .default(1000)
+          .describe("Minimum Bing impressions for a page to count as high visibility"),
+        maximum_ai_traffic: z
+          .number()
+          .nonnegative()
+          .optional()
+          .default(5)
+          .describe("Maximum GA4 AI-referral traffic value for a page to count as low AI traffic"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(500)
+          .optional()
+          .default(100)
+          .describe("Maximum opportunity pages to return")
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async args => {
+      const bingRows = await callBingApi("GetPageStats", {
+        params: { siteUrl: args.site_url }
+      });
+      const result = findAiTrafficOpportunities({
+        siteUrl: args.site_url,
+        bingRows,
+        ga4Csv: args.ga4_csv,
+        ga4Rows: args.ga4_rows,
+        ga4RowsAreAiFiltered: args.ga4_rows_are_ai_filtered,
+        ga4MetricName: args.ga4_metric_name,
+        additionalAiSources: args.additional_ai_sources,
+        minimumBingImpressions: args.minimum_bing_impressions,
+        maximumAiTraffic: args.maximum_ai_traffic,
+        limit: args.limit
+      });
+      return structuredSuccess("Bing-to-AI traffic opportunities", result);
+    })
   );
 
   registerLimitedReadTool(

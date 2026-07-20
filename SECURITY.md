@@ -28,6 +28,8 @@ Neither secret is returned by an MCP tool. IndexNow submission redirects are not
 - Bing and IndexNow submissions reuse the public-URL checks and reject URLs outside the configured site or host.
 - IndexNow key validation follows only public, same-host redirects and never returns the key or key-file URL.
 - The fixer does not guess image alt text or remove `noindex` directives automatically.
+- `aeo_find_ai_traffic_opportunities` accepts only aggregate page/source/traffic data. It does not need a Google credential, does not call GA4, does not return the raw CSV, and rejects GA4 page URLs from another host.
+- Do not supply GA4 exports containing user identifiers, event-level records, emails, client IDs, or other personal data.
 
 ## Reporting a vulnerability
 

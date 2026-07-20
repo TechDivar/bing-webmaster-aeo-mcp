@@ -1,12 +1,13 @@
 # AI Search Operations MCP for Bing Webmaster
 
-An open-source MCP server that helps marketers improve pages for human readers and AI search. It combines Bing Webmaster data, technical SEO scanning, AI-search content audits, approval-gated WordPress fix preparation, live verification, Bing URL submission, and a separate IndexNow integration.
+An open-source MCP server that helps marketers improve pages for human readers and AI search. It combines Bing Webmaster data, GA4 AI-traffic opportunity matching, technical SEO scanning, AI-search content audits, approval-gated WordPress fix preparation, live verification, Bing URL submission, and a separate IndexNow integration.
 
 No API key is stored in this repository.
 
 ## What marketers can do
 
 - See the queries and pages already receiving Bing impressions and clicks.
+- Find pages with high Bing impressions but little or no identifiable AI-referral traffic in an aggregated GA4 export.
 - Review rankings, crawl activity, crawl issues, sitemaps, backlinks, keyword research data, URL details, and submission quota.
 - Scan one page or up to 20 pages for common SEO/AEO problems.
 - Find duplicate H1s, missing image alt text, metadata, canonical, robots, language, HTTP, and JSON-LD problems.
@@ -28,6 +29,8 @@ No API key is stored in this repository.
 > List the websites connected to my Bing Webmaster account.
 
 > Show my top Bing queries and pages.
+
+> Using this GA4 CSV, find pages with at least 1,000 Bing impressions and no more than 5 AI-referral sessions.
 
 > Scan these 10 URLs and group the AEO problems by priority.
 
@@ -52,7 +55,25 @@ No API key is stored in this repository.
 
 The fixer will not invent image descriptions, internal destination URLs, facts, prices, or competitor claims. Codex must supply proposed wording from reviewed source material. It also requires confirmation that the WordPress theme already renders the post title as the page H1 before changing content-body H1s to H2s.
 
-## The 45 MCP tools
+## Find high-impression, low-AI-traffic pages
+
+Use `aeo_find_ai_traffic_opportunities` with either an attached GA4 CSV or aggregated rows from a connected GA4 tool. The MCP pulls Bing's top-page statistics itself and matches the pages by URL.
+
+The simplest GA4 CSV contains these three columns:
+
+```csv
+Page path + query string,Session source / medium,Sessions
+/blog/example/,chatgpt.com / referral,3
+/blog/another-page/,google / organic,120
+```
+
+Common GA4 page, source/referrer, and traffic column names are detected automatically. If the export is already filtered to AI referrals, a page column plus a traffic column is enough. Only aggregate page-level data should be supplied—never export user-level or event-level identifiers.
+
+The result lists each opportunity URL, Bing impressions and clicks, Bing positions, identifiable GA4 AI traffic, the reason it was selected, and the recommended next audit. Normal search and referral traffic is ignored. You can add extra AI referral domains if your analytics uses a source that is not in the built-in list.
+
+The raw CSV is not returned or sent to Google. The MCP returns only the aggregate comparison. Bing and GA4 may cover different reporting periods, and some AI visits appear as direct, organic, or unknown traffic, so the output is an opportunity list rather than proof of total AI usage.
+
+## The 46 MCP tools
 
 ### Bing Webmaster data
 
@@ -90,6 +111,10 @@ The fixer will not invent image descriptions, internal destination URLs, facts, 
 - `aeo_internal_duplicate_check` — compare 2 to 30 article bodies using transparent text similarity
 - `aeo_multilang_schema_parity` — compare Article/FAQPage JSON-LD and freshness across translated versions
 
+### Bing-to-AI traffic opportunities
+
+- `aeo_find_ai_traffic_opportunities` — combine Bing `GetPageStats` with an aggregated GA4 CSV or rows to find high-impression pages with low identifiable AI-referral traffic
+
 ### AI-search operations
 
 - `aeo_audit_page` — run all AI-search audits together
@@ -125,6 +150,8 @@ Submission tools are marked as write actions. Audits and fix-preparation tools a
 
 The added Bing tools call these documented methods with their official parameters. Read tools return Bing's normalized response. The batch tool adds clearly labelled local validation, quota, success, failure, and skip results; it does not claim that Bing returned per-URL outcomes.
 
+- `aeo_find_ai_traffic_opportunities` → [`GetPageStats(siteUrl)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.getpagestats?view=bing-webmaster-dotnet) plus aggregate GA4 data supplied by the user. The matcher recognizes GA4 page-path and referrer/source columns described in Google's [Analytics dimensions and metrics reference](https://developers.google.com/analytics/devguides/reporting/data/v1/exploration-api-schema); it does not call the GA4 API.
+
 - `bing_get_link_counts` → [`GetLinkCounts(siteUrl, page)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.getlinkcounts?view=bing-webmaster-dotnet)
 - `bing_get_url_links` → [`GetUrlLinks(siteUrl, link, page)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.geturllinks?view=bing-webmaster-dotnet)
 - `bing_get_keyword_stats` → [`GetKeywordStats(q, country, language)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.getkeywordstats?view=bing-webmaster-dotnet)
@@ -151,6 +178,9 @@ The AI-search scores are transparent HTML and language-pattern heuristics. They 
 - `llms.txt` is a community proposal. Having one does not guarantee discovery, ranking, crawling, or citation by an AI system.
 - Near-duplicate similarity is a review signal, not proof that a search engine will deduplicate pages or a command to delete one.
 - Multilingual parity compares only the URLs supplied. Different locales may legitimately need different visible content or schema.
+- The AI-traffic opportunity tool does not connect to GA4 or require a Google key. It processes the aggregate CSV or rows supplied to the local MCP.
+- GA4 referral data is incomplete because some AI visits appear as direct, organic, or unknown traffic.
+- Bing says `GetPageStats` is updated weekly. Its period may not exactly match the date range of a GA4 export.
 
 ## Important Bing limitation
 
