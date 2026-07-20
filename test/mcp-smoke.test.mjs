@@ -48,6 +48,9 @@ test("serves tools over MCP stdio", async () => {
     assert.ok(names.includes("seo_recheck_page"));
     assert.ok(names.includes("aeo_plan_page_fixes"));
     assert.ok(names.includes("aeo_prepare_wordpress_fixes"));
+    assert.ok(names.includes("aeo_llms_txt_audit"));
+    assert.ok(names.includes("aeo_internal_duplicate_check"));
+    assert.ok(names.includes("aeo_multilang_schema_parity"));
     assert.ok(names.includes("aeo_audit_page"));
     assert.ok(names.includes("aeo_ai_readability_audit"));
     assert.ok(names.includes("aeo_entity_coverage"));
@@ -60,7 +63,7 @@ test("serves tools over MCP stdio", async () => {
     assert.ok(names.includes("aeo_schema_recommendations"));
     assert.ok(names.includes("aeo_freshness_audit"));
     assert.ok(names.includes("aeo_autofix_page"));
-    assert.equal(names.length, 42);
+    assert.equal(names.length, 45);
 
     const submitTool = listed.tools.find(tool => tool.name === "bing_submit_url");
     assert.equal(submitTool.annotations.readOnlyHint, false);

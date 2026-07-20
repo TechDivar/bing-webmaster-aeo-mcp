@@ -11,6 +11,9 @@ No API key is stored in this repository.
 - Scan one page or up to 20 pages for common SEO/AEO problems.
 - Find duplicate H1s, missing image alt text, metadata, canonical, robots, language, HTTP, and JSON-LD problems.
 - Audit AI readability, entity coverage, citation readiness, intent coverage, schema fit, internal links, and freshness.
+- Audit a site's proposed `llms.txt` file and compare it with important hub URLs.
+- Find highly similar article bodies across a catalog before search systems choose the wrong page.
+- Compare Article/FAQPage schema and `dateModified` freshness across translated pages.
 - Compare heading topics with public competitor pages.
 - Preview the answer that can be extracted using only the page's own words.
 - Find concise passages that are easier to quote or paraphrase accurately.
@@ -49,7 +52,7 @@ No API key is stored in this repository.
 
 The fixer will not invent image descriptions, internal destination URLs, facts, prices, or competitor claims. Codex must supply proposed wording from reviewed source material. It also requires confirmation that the WordPress theme already renders the post title as the page H1 before changing content-body H1s to H2s.
 
-## The 42 MCP tools
+## The 45 MCP tools
 
 ### Bing Webmaster data
 
@@ -80,6 +83,12 @@ The fixer will not invent image descriptions, internal destination URLs, facts, 
 - `seo_recheck_page`
 - `aeo_plan_page_fixes`
 - `aeo_prepare_wordpress_fixes`
+
+### Catalog and multilingual audits
+
+- `aeo_llms_txt_audit` — inspect the root-level Markdown file, its heading, links, and supplied canonical pages
+- `aeo_internal_duplicate_check` — compare 2 to 30 article bodies using transparent text similarity
+- `aeo_multilang_schema_parity` — compare Article/FAQPage JSON-LD and freshness across translated versions
 
 ### AI-search operations
 
@@ -139,6 +148,9 @@ The AI-search scores are transparent HTML and language-pattern heuristics. They 
 - Freshness findings mean “verify this,” not “this is false.”
 - Schema suggestions must match visible content and current search-platform rules.
 - `aeo_autofix_page` prepares changes only. A connected WordPress MCP is needed to publish after human approval.
+- `llms.txt` is a community proposal. Having one does not guarantee discovery, ranking, crawling, or citation by an AI system.
+- Near-duplicate similarity is a review signal, not proof that a search engine will deduplicate pages or a command to delete one.
+- Multilingual parity compares only the URLs supplied. Different locales may legitimately need different visible content or schema.
 
 ## Important Bing limitation
 

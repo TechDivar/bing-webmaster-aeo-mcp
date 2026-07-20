@@ -1,7 +1,7 @@
 {
   "name": "bing-webmaster-mcp",
-  "version": "2.1.0",
-  "description": "An open-source AI Search Operations MCP for Bing Webmaster data, AEO audits, approval-gated WordPress fixes, verification, and URL submission.",
+  "version": "2.2.0",
+  "description": "An open-source AI Search Operations MCP for Bing Webmaster data, catalog-wide AEO audits, safe WordPress fixes, verification, and URL submission.",
   "private": true,
   "license": "MIT",
   "author": "TechDivar",

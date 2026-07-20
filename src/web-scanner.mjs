@@ -11,7 +11,7 @@ const MAX_RETRY_DELAY_MS = 15_000;
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 " +
-  "Bing-Webmaster-AEO-MCP/2.1";
+  "Bing-Webmaster-AEO-MCP/2.2";
 
 export class WebScannerError extends Error {
   constructor(message) {
@@ -475,12 +475,15 @@ function retryDelayMs(response, attempt) {
 const defaultSleep = milliseconds =>
   new Promise(resolve => setTimeout(resolve, milliseconds));
 
-export async function fetchPageDocument(
+async function fetchPublicResource(
   urlValue,
   {
     fetchImpl = globalThis.fetch,
     sleepImpl = defaultSleep,
-    retryLimit = DEFAULT_RETRY_LIMIT
+    retryLimit = DEFAULT_RETRY_LIMIT,
+    accept = "*/*",
+    allowedContentType,
+    expectedContent = "a supported public resource"
   } = {}
 ) {
   const requested = await validatePublicUrl(urlValue);
@@ -495,7 +498,7 @@ export async function fetchPageDocument(
           method: "GET",
           redirect: "manual",
           headers: {
-            Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
+            Accept: accept,
             "Accept-Language": "en-US,en;q=0.9",
             "Cache-Control": "no-cache",
             "User-Agent": BROWSER_USER_AGENT
@@ -525,13 +528,13 @@ export async function fetchPageDocument(
   }
 
   const contentType = response.headers.get("content-type") || "";
-  if (!/\b(?:text\/html|application\/xhtml\+xml)\b/i.test(contentType)) {
+  if (allowedContentType && !allowedContentType.test(contentType)) {
     throw new WebScannerError(
-      `The URL did not return an HTML webpage. Content-Type: ${contentType || "unknown"}`
+      `The URL did not return ${expectedContent}. Content-Type: ${contentType || "unknown"}`
     );
   }
 
-  const html = await readHtmlBody(response);
+  const text = await readHtmlBody(response);
   const context = {
     requestedUrl: requested.href,
     finalUrl: current.href,
@@ -540,6 +543,33 @@ export async function fetchPageDocument(
     contentType,
     xRobotsTag: response.headers.get("x-robots-tag")
   };
+
+  return { text, context };
+}
+
+export async function fetchTextResource(urlValue, options = {}) {
+  const resource = await fetchPublicResource(urlValue, {
+    ...options,
+    accept: "text/plain,text/markdown,text/x-markdown;q=0.9,*/*;q=0.1",
+    allowedContentType: /\btext\/(?:plain|markdown|x-markdown)\b/i,
+    expectedContent: "a plain-text or Markdown document"
+  });
+
+  return {
+    text: resource.text,
+    context: resource.context
+  };
+}
+
+export async function fetchPageDocument(urlValue, options = {}) {
+  const resource = await fetchPublicResource(urlValue, {
+    ...options,
+    accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
+    allowedContentType: /\b(?:text\/html|application\/xhtml\+xml)\b/i,
+    expectedContent: "an HTML webpage"
+  });
+  const html = resource.text;
+  const context = resource.context;
 
   return {
     html,

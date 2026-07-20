@@ -24,6 +24,7 @@ Neither secret is returned by an MCP tool. IndexNow submission redirects are not
 - `aeo_autofix_page` never publishes. It applies only exact unique replacements in memory, returns a diff, and keeps `approval_required` true.
 - Autofix replacement fragments reject scripts, forms, inline event handlers, and `javascript:` URLs.
 - The scanner blocks local and private network addresses, nonstandard ports, oversized pages, and excessive redirects.
+- HTML pages and plain-text catalog resources use the same redirect-by-redirect SSRF checks and 5 MB response limit.
 - Bing and IndexNow submissions reuse the public-URL checks and reject URLs outside the configured site or host.
 - IndexNow key validation follows only public, same-host redirects and never returns the key or key-file URL.
 - The fixer does not guess image alt text or remove `noindex` directives automatically.

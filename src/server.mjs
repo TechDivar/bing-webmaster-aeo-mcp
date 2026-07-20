@@ -31,6 +31,12 @@ import {
   prepareWordPressFixes
 } from "./aeo-fixer.mjs";
 import {
+  AeoCatalogAuditError,
+  auditLlmsTxt,
+  checkInternalDuplicates,
+  checkMultilangSchemaParity
+} from "./aeo-catalog-audits.mjs";
+import {
   AiSearchAuditError,
   analyzeAiReadability,
   analyzeCitationReadiness,
@@ -151,6 +157,7 @@ function failure(error) {
     error instanceof IndexNowError ||
     error instanceof WebScannerError ||
     error instanceof AeoFixerError ||
+    error instanceof AeoCatalogAuditError ||
     error instanceof AiSearchAuditError
     ? error.message
     : "The Bing Webmaster request failed unexpectedly.";
@@ -233,7 +240,7 @@ function registerUrlReadTool(server, name, title, description, method) {
 
 export function createServer() {
   const server = new McpServer(
-    { name: "bing-webmaster-aeo", version: "2.1.0" },
+    { name: "bing-webmaster-aeo", version: "2.2.0" },
     {
       instructions:
         "Bing tools call Bing's public Webmaster API; they do not reproduce the full dashboard URL Inspection SEO/GEO report. IndexNow uses a separate client and local key. AI-search audits are transparent heuristics, not predictions or guarantees about citations by ChatGPT, Copilot, Google, or Bing. For AEO fixes, audit the page, read the latest post through a connected WordPress MCP, prepare an exact diff, request approval before updating WordPress, recheck the public page, then submit it when requested. Never request or reveal Bing API keys or IndexNow keys."
@@ -613,6 +620,84 @@ export function createServer() {
         themeRendersTitleH1: args.theme_renders_title_h1
       });
       return success("Prepared WordPress AEO fixes", result);
+    })
+  );
+
+  server.registerTool(
+    "aeo_llms_txt_audit",
+    {
+      title: "Audit llms.txt",
+      description: "Safely check for a root-level llms.txt Markdown file, inspect its links and heading, and compare it with supplied canonical or hub URLs. llms.txt is a community proposal, not a ranking guarantee.",
+      inputSchema: {
+        site_url: webUrlSchema.describe("Public site URL, such as https://example.com"),
+        canonical_urls: z
+          .array(webUrlSchema)
+          .max(50)
+          .optional()
+          .default([])
+          .describe("Optional canonical or hub URLs that should appear in llms.txt")
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ site_url, canonical_urls }) => {
+      const result = await auditLlmsTxt(site_url, {
+        canonicalUrls: canonical_urls
+      });
+      return success("llms.txt audit", result);
+    })
+  );
+
+  server.registerTool(
+    "aeo_internal_duplicate_check",
+    {
+      title: "Check internal near-duplicate content",
+      description: "Safely fetch 2 to 30 public pages and flag highly similar article bodies using word-shingle similarity. Results are review signals, not canonicalization decisions.",
+      inputSchema: {
+        urls: z
+          .array(webUrlSchema)
+          .min(2)
+          .max(30)
+          .describe("Two to 30 published internal page URLs"),
+        similarity_threshold: z
+          .number()
+          .min(0.5)
+          .max(0.99)
+          .optional()
+          .default(0.82)
+          .describe("Similarity level from 0.5 to 0.99 used to flag a pair")
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ urls, similarity_threshold }) => {
+      const result = await checkInternalDuplicates(urls, {
+        similarityThreshold: similarity_threshold
+      });
+      return success("Internal near-duplicate check", result);
+    })
+  );
+
+  server.registerTool(
+    "aeo_multilang_schema_parity",
+    {
+      title: "Check multilingual schema and freshness parity",
+      description: "Compare Article and FAQPage JSON-LD plus dateModified freshness across 2 to 20 translated versions of the same article. Supports common @graph markup.",
+      inputSchema: {
+        pages: z
+          .array(
+            z.object({
+              locale: z.string().trim().min(1).max(20),
+              url: webUrlSchema.describe("Published page URL for this locale")
+            })
+          )
+          .min(2)
+          .max(20)
+          .describe("Translated versions of the same article")
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ pages }) => {
+      const result = await checkMultilangSchemaParity(pages);
+      return success("Multilingual schema and freshness parity", result);
     })
   );
 

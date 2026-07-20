@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   analyzeHtml,
+  fetchTextResource,
   isBlockedIp,
   scanPage,
   validatePublicUrl
@@ -144,4 +145,47 @@ test("retries a rate-limited page before scanning its HTML", async () => {
   assert.equal(calls, 2);
   assert.equal(result.http.status, 200);
   assert.equal(result.summary.passed, true);
+});
+
+test("safely follows redirects when fetching a public text resource", async () => {
+  let calls = 0;
+  const result = await fetchTextResource("https://8.8.8.8/llms.txt", {
+    fetchImpl: async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response("", {
+          status: 302,
+          headers: { location: "/files/llms.txt", "content-type": "text/plain" }
+        });
+      }
+      return new Response("# Example", {
+        status: 200,
+        headers: { "content-type": "text/markdown" }
+      });
+    }
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(result.text, "# Example");
+  assert.equal(result.context.finalUrl, "https://8.8.8.8/files/llms.txt");
+});
+
+test("blocks a text-resource redirect to a private address", async () => {
+  let calls = 0;
+  await assert.rejects(
+    fetchTextResource("https://8.8.8.8/llms.txt", {
+      fetchImpl: async () => {
+        calls += 1;
+        return new Response("", {
+          status: 302,
+          headers: {
+            location: "http://127.0.0.1/private",
+            "content-type": "text/plain"
+          }
+        });
+      }
+    }),
+    /Local or private network addresses cannot be scanned/
+  );
+  assert.equal(calls, 1);
 });
