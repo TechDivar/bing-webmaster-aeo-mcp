@@ -1,0 +1,41 @@
+{
+  "name": "bing-webmaster-mcp",
+  "version": "1.2.0",
+  "description": "An MCP server for Bing Webmaster data, live SEO/AEO scanning, safe WordPress fix preparation, verification, and URL submission.",
+  "private": true,
+  "license": "MIT",
+  "author": "TechDivar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TechDivar/bing-webmaster-aeo-mcp.git"
+  },
+  "homepage": "https://github.com/TechDivar/bing-webmaster-aeo-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/TechDivar/bing-webmaster-aeo-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "bing-webmaster",
+    "aeo",
+    "seo",
+    "wordpress",
+    "codex",
+    "marketing"
+  ],
+  "type": "module",
+  "main": "src/server.mjs",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test",
+    "setup-key": "bash scripts/setup-key.sh",
+    "verify": "node scripts/verify-connection.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "cheerio": "^1.0.0",
+    "zod": "4.4.3"
+  }
+}
