@@ -30,7 +30,19 @@ test("serves tools over MCP stdio", async () => {
     assert.ok(names.includes("bing_get_query_stats"));
     assert.ok(names.includes("bing_get_fetched_url_details"));
     assert.ok(names.includes("bing_get_url_traffic_info"));
+    assert.ok(names.includes("bing_get_link_counts"));
+    assert.ok(names.includes("bing_get_url_links"));
+    assert.ok(names.includes("bing_get_keyword_stats"));
+    assert.ok(names.includes("bing_get_related_keywords"));
+    assert.ok(names.includes("bing_get_query_page_stats"));
+    assert.ok(names.includes("bing_get_query_page_detail_stats"));
+    assert.ok(names.includes("bing_get_url_info"));
+    assert.ok(names.includes("bing_get_children_url_traffic_info"));
     assert.ok(names.includes("bing_submit_url"));
+    assert.ok(names.includes("bing_submit_url_batch"));
+    assert.ok(names.includes("indexnow_validate_key"));
+    assert.ok(names.includes("indexnow_submit_url"));
+    assert.ok(names.includes("indexnow_submit_urls"));
     assert.ok(names.includes("seo_scan_page"));
     assert.ok(names.includes("seo_scan_pages"));
     assert.ok(names.includes("seo_recheck_page"));
@@ -48,11 +60,18 @@ test("serves tools over MCP stdio", async () => {
     assert.ok(names.includes("aeo_schema_recommendations"));
     assert.ok(names.includes("aeo_freshness_audit"));
     assert.ok(names.includes("aeo_autofix_page"));
-    assert.equal(names.length, 30);
-    assert.equal(names.includes("bing_get_url_info"), false);
+    assert.equal(names.length, 42);
 
     const submitTool = listed.tools.find(tool => tool.name === "bing_submit_url");
     assert.equal(submitTool.annotations.readOnlyHint, false);
+
+    const batchTool = listed.tools.find(tool => tool.name === "bing_submit_url_batch");
+    assert.equal(batchTool.annotations.readOnlyHint, false);
+    assert.equal(batchTool.inputSchema.properties.urls.maxItems, 500);
+
+    const indexNowTool = listed.tools.find(tool => tool.name === "indexnow_submit_urls");
+    assert.equal(indexNowTool.annotations.readOnlyHint, false);
+    assert.equal(indexNowTool.inputSchema.properties.urls.maxItems, 10_000);
 
     const prepareTool = listed.tools.find(
       tool => tool.name === "aeo_prepare_wordpress_fixes"

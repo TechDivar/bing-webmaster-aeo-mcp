@@ -12,11 +12,18 @@ import {
   isUrlWithinSite,
   limitRows
 } from "./bing-client.mjs";
+import { submitBingUrlBatch } from "./bing-submission.mjs";
+import {
+  IndexNowError,
+  submitIndexNowUrls,
+  validateIndexNowKey
+} from "./indexnow-client.mjs";
 import {
   WebScannerError,
   fetchPageDocument,
   scanPage,
-  scanPages
+  scanPages,
+  validatePublicUrl
 } from "./web-scanner.mjs";
 import {
   AeoFixerError,
@@ -57,6 +64,33 @@ const limitSchema = z
   .optional()
   .default(100)
   .describe("Maximum rows to return, from 1 to 1000");
+
+const signedPageSchema = z
+  .number()
+  .int()
+  .min(0)
+  .max(32_767)
+  .optional()
+  .default(0)
+  .describe("Zero-based API result page");
+
+const unsignedPageSchema = z
+  .number()
+  .int()
+  .min(0)
+  .max(65_535)
+  .optional()
+  .default(0)
+  .describe("Zero-based API result page");
+
+const keywordSchema = z.string().trim().min(1).max(500);
+const countrySchema = z.string().trim().min(1).max(20);
+const languageSchema = z.string().trim().min(1).max(50);
+const dateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date in YYYY-MM-DD format");
+const submissionUrlSchema = z.string().trim().max(4096);
+const changeTypeSchema = z.enum(["added", "updated", "deleted"]);
 
 const entitySchema = z.string().min(1).max(150);
 const intentSchema = z.enum([
@@ -105,8 +139,16 @@ function success(label, data) {
   };
 }
 
+function structuredSuccess(label, data) {
+  return {
+    ...success(label, data),
+    structuredContent: data
+  };
+}
+
 function failure(error) {
   const message = error instanceof BingWebmasterError ||
+    error instanceof IndexNowError ||
     error instanceof WebScannerError ||
     error instanceof AeoFixerError ||
     error instanceof AiSearchAuditError
@@ -191,10 +233,10 @@ function registerUrlReadTool(server, name, title, description, method) {
 
 export function createServer() {
   const server = new McpServer(
-    { name: "bing-webmaster-aeo", version: "2.0.0" },
+    { name: "bing-webmaster-aeo", version: "2.1.0" },
     {
       instructions:
-        "Bing tools call Bing's public Webmaster API; they do not reproduce the full dashboard URL Inspection SEO/GEO report. AI-search audits are transparent heuristics, not predictions or guarantees about citations by ChatGPT, Copilot, Google, or Bing. For AEO fixes, audit the page, read the latest post through a connected WordPress MCP, prepare an exact diff, request approval before updating WordPress, recheck the public page, then submit it to Bing when requested. Never request or reveal API keys."
+        "Bing tools call Bing's public Webmaster API; they do not reproduce the full dashboard URL Inspection SEO/GEO report. IndexNow uses a separate client and local key. AI-search audits are transparent heuristics, not predictions or guarantees about citations by ChatGPT, Copilot, Google, or Bing. For AEO fixes, audit the page, read the latest post through a connected WordPress MCP, prepare an exact diff, request approval before updating WordPress, recheck the public page, then submit it when requested. Never request or reveal Bing API keys or IndexNow keys."
     }
   );
 
@@ -276,6 +318,168 @@ export function createServer() {
     "Bing URL traffic information",
     "Get Bing index traffic details for one URL.",
     "GetUrlTrafficInfo"
+  );
+
+  server.registerTool(
+    "bing_get_link_counts",
+    {
+      title: "Bing inbound link counts",
+      description: "Get one official Bing result page of site URLs and their inbound-link counts.",
+      inputSchema: {
+        site_url: siteUrlSchema,
+        page: signedPageSchema
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ site_url, page }) => {
+      const data = await callBingApi("GetLinkCounts", {
+        params: { siteUrl: site_url, page }
+      });
+      return success("Bing inbound link counts", data);
+    })
+  );
+
+  server.registerTool(
+    "bing_get_url_links",
+    {
+      title: "Bing inbound links for URL",
+      description: "Get one official Bing result page of inbound links and anchor text for a site URL.",
+      inputSchema: {
+        site_url: siteUrlSchema,
+        url: webUrlSchema.describe("Site URL whose inbound links should be returned"),
+        page: signedPageSchema
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ site_url, url, page }) => {
+      const data = await callBingApi("GetUrlLinks", {
+        params: { siteUrl: site_url, link: url, page }
+      });
+      return success("Bing inbound links for URL", data);
+    })
+  );
+
+  server.registerTool(
+    "bing_get_keyword_stats",
+    {
+      title: "Bing keyword historical statistics",
+      description: "Get Bing's historical keyword statistics for a query, country, and language.",
+      inputSchema: {
+        query: keywordSchema,
+        country: countrySchema,
+        language: languageSchema,
+        limit: limitSchema
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ query, country, language, limit }) => {
+      const data = await callBingApi("GetKeywordStats", {
+        params: { q: query, country, language }
+      });
+      return success("Bing keyword historical statistics", limitRows(data, limit));
+    })
+  );
+
+  server.registerTool(
+    "bing_get_related_keywords",
+    {
+      title: "Bing related keywords",
+      description: "Get related-keyword impressions for the exact query, country, language, and date range supported by Bing's API.",
+      inputSchema: {
+        query: keywordSchema,
+        country: countrySchema,
+        language: languageSchema,
+        start_date: dateSchema,
+        end_date: dateSchema,
+        limit: limitSchema
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ query, country, language, start_date, end_date, limit }) => {
+      if (start_date > end_date) {
+        throw new BingWebmasterError("start_date must be on or before end_date.");
+      }
+      const data = await callBingApi("GetRelatedKeywords", {
+        params: {
+          q: query,
+          country,
+          language,
+          startDate: start_date,
+          endDate: end_date
+        }
+      });
+      return success("Bing related keywords", limitRows(data, limit));
+    })
+  );
+
+  server.registerTool(
+    "bing_get_query_page_stats",
+    {
+      title: "Bing pages for query",
+      description: "Get Bing traffic statistics for pages associated with one search query.",
+      inputSchema: {
+        site_url: siteUrlSchema,
+        query: keywordSchema,
+        limit: limitSchema
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ site_url, query, limit }) => {
+      const data = await callBingApi("GetQueryPageStats", {
+        params: { siteUrl: site_url, query }
+      });
+      return success("Bing pages for query", limitRows(data, limit));
+    })
+  );
+
+  server.registerTool(
+    "bing_get_query_page_detail_stats",
+    {
+      title: "Bing query and page detail statistics",
+      description: "Get dated clicks, impressions, and position details for one query and one page.",
+      inputSchema: {
+        site_url: siteUrlSchema,
+        query: keywordSchema,
+        page_url: webUrlSchema,
+        limit: limitSchema
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ site_url, query, page_url, limit }) => {
+      const data = await callBingApi("GetQueryPageDetailStats", {
+        params: { siteUrl: site_url, query, page: page_url }
+      });
+      return success("Bing query and page detail statistics", limitRows(data, limit));
+    })
+  );
+
+  registerUrlReadTool(
+    server,
+    "bing_get_url_info",
+    "Bing URL index information",
+    "Get Bing's index details for one page, including only fields returned by the official GetUrlInfo method.",
+    "GetUrlInfo"
+  );
+
+  server.registerTool(
+    "bing_get_children_url_traffic_info",
+    {
+      title: "Bing child URL traffic information",
+      description: "Get one official Bing result page of index traffic details for URLs under a directory.",
+      inputSchema: {
+        site_url: siteUrlSchema,
+        url: webUrlSchema.describe("Directory URL whose child traffic should be returned"),
+        page: unsignedPageSchema,
+        limit: limitSchema
+      },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ site_url, url, page, limit }) => {
+      const data = await callBingApi("GetChildrenUrlTrafficInfo", {
+        params: { siteUrl: site_url, url, page }
+      });
+      return success("Bing child URL traffic information", limitRows(data, limit));
+    })
   );
 
   server.registerTool(
@@ -679,6 +883,8 @@ export function createServer() {
       annotations: writeAnnotations
     },
     safeHandler(async ({ site_url, url }) => {
+      await validatePublicUrl(site_url);
+      await validatePublicUrl(url);
       if (!isUrlWithinSite(site_url, url)) {
         throw new BingWebmasterError(
           "The submitted URL must belong to the verified site's domain."
@@ -694,6 +900,27 @@ export function createServer() {
   );
 
   server.registerTool(
+    "bing_submit_url_batch",
+    {
+      title: "Submit a URL batch to Bing",
+      description: "Validate and submit up to 500 same-site public URLs through Bing's documented SubmitUrlbatch route. The remaining daily and monthly quota is checked first.",
+      inputSchema: {
+        site_url: siteUrlSchema,
+        urls: z
+          .array(submissionUrlSchema)
+          .min(1)
+          .max(500)
+          .describe("One to 500 URLs belonging to the configured Bing site")
+      },
+      annotations: writeAnnotations
+    },
+    safeHandler(async ({ site_url, urls }) => {
+      const result = await submitBingUrlBatch({ siteUrl: site_url, urls });
+      return structuredSuccess("Bing URL batch submission", result);
+    })
+  );
+
+  server.registerTool(
     "bing_submit_sitemap",
     {
       title: "Submit sitemap to Bing",
@@ -705,6 +932,8 @@ export function createServer() {
       annotations: writeAnnotations
     },
     safeHandler(async ({ site_url, sitemap_url }) => {
+      await validatePublicUrl(site_url);
+      await validatePublicUrl(sitemap_url);
       if (!isUrlWithinSite(site_url, sitemap_url)) {
         throw new BingWebmasterError(
           "The sitemap URL must belong to the verified site's domain."
@@ -720,6 +949,72 @@ export function createServer() {
         sitemap_url,
         submitted: true
       });
+    })
+  );
+
+  server.registerTool(
+    "indexnow_validate_key",
+    {
+      title: "Validate IndexNow key setup",
+      description: "Check that the locally configured IndexNow key file is publicly accessible, contains the configured key, and remains on the configured site's host. The key is never returned.",
+      inputSchema: { site_url: siteUrlSchema },
+      annotations: readOnlyAnnotations
+    },
+    safeHandler(async ({ site_url }) => {
+      const result = await validateIndexNowKey({ siteUrl: site_url });
+      return structuredSuccess("IndexNow key validation", result);
+    })
+  );
+
+  server.registerTool(
+    "indexnow_submit_url",
+    {
+      title: "Submit one URL through IndexNow",
+      description: "Validate the same-host key file and notify IndexNow about one added, updated, or deleted public URL. This does not guarantee crawling or indexing.",
+      inputSchema: {
+        site_url: siteUrlSchema,
+        url: submissionUrlSchema,
+        change_type: changeTypeSchema.optional().default("updated")
+      },
+      annotations: writeAnnotations
+    },
+    safeHandler(async ({ site_url, url, change_type }) => {
+      const result = await submitIndexNowUrls({
+        siteUrl: site_url,
+        entries: [{ url, changeType: change_type }]
+      });
+      return structuredSuccess("IndexNow URL submission", result);
+    })
+  );
+
+  server.registerTool(
+    "indexnow_submit_urls",
+    {
+      title: "Submit URL changes through IndexNow",
+      description: "Validate the same-host key file and notify IndexNow about up to 10,000 added, updated, or deleted public URLs on the configured host. This does not guarantee crawling or indexing.",
+      inputSchema: {
+        site_url: siteUrlSchema,
+        urls: z
+          .array(
+            z.object({
+              url: submissionUrlSchema,
+              change_type: changeTypeSchema.optional().default("updated")
+            })
+          )
+          .min(1)
+          .max(10_000)
+      },
+      annotations: writeAnnotations
+    },
+    safeHandler(async ({ site_url, urls }) => {
+      const result = await submitIndexNowUrls({
+        siteUrl: site_url,
+        entries: urls.map(item => ({
+          url: item.url,
+          changeType: item.change_type
+        }))
+      });
+      return structuredSuccess("IndexNow URL submissions", result);
     })
   );
 

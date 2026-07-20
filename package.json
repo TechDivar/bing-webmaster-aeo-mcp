@@ -1,6 +1,6 @@
 {
   "name": "bing-webmaster-mcp",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "An open-source AI Search Operations MCP for Bing Webmaster data, AEO audits, approval-gated WordPress fixes, verification, and URL submission.",
   "private": true,
   "license": "MIT",
@@ -30,6 +30,7 @@
     "start": "node src/server.mjs",
     "test": "node --test",
     "setup-key": "bash scripts/setup-key.sh",
+    "setup-indexnow-key": "bash scripts/setup-indexnow-key.sh",
     "verify": "node scripts/verify-connection.mjs"
   },
   "engines": {

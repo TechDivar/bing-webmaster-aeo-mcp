@@ -1,13 +1,13 @@
 # AI Search Operations MCP for Bing Webmaster
 
-An open-source MCP server that helps marketers improve pages for human readers and AI search. It combines Bing Webmaster data, technical SEO scanning, AI-search content audits, approval-gated WordPress fix preparation, live verification, and Bing URL submission.
+An open-source MCP server that helps marketers improve pages for human readers and AI search. It combines Bing Webmaster data, technical SEO scanning, AI-search content audits, approval-gated WordPress fix preparation, live verification, Bing URL submission, and a separate IndexNow integration.
 
 No API key is stored in this repository.
 
 ## What marketers can do
 
 - See the queries and pages already receiving Bing impressions and clicks.
-- Review rankings, crawl activity, crawl issues, sitemaps, and submission quota.
+- Review rankings, crawl activity, crawl issues, sitemaps, backlinks, keyword research data, URL details, and submission quota.
 - Scan one page or up to 20 pages for common SEO/AEO problems.
 - Find duplicate H1s, missing image alt text, metadata, canonical, robots, language, HTTP, and JSON-LD problems.
 - Audit AI readability, entity coverage, citation readiness, intent coverage, schema fit, internal links, and freshness.
@@ -17,7 +17,8 @@ No API key is stored in this repository.
 - Turn every finding into a clear fix plan and exact before/after diff.
 - Prepare corrected WordPress HTML without publishing it automatically.
 - Recheck the live page after a fix.
-- Submit an approved URL or sitemap to Bing.
+- Submit an approved URL, URL batch, or sitemap to Bing.
+- Validate an IndexNow key file and notify IndexNow about added, updated, or deleted URLs.
 
 ## Example prompts for Codex
 
@@ -44,11 +45,11 @@ No API key is stored in this repository.
 5. Codex shows the changes and requests approval before a WordPress write.
 6. After approval, the connected WordPress MCP updates the post.
 7. `seo_recheck_page` and the AEO audits verify the public result.
-8. `bing_submit_url` requests a fresh Bing crawl when you ask for it.
+8. `bing_submit_url` or `bing_submit_url_batch` requests a fresh Bing crawl when you ask for it.
 
 The fixer will not invent image descriptions, internal destination URLs, facts, prices, or competitor claims. Codex must supply proposed wording from reviewed source material. It also requires confirmation that the WordPress theme already renders the post title as the page H1 before changing content-body H1s to H2s.
 
-## The 30 MCP tools
+## The 42 MCP tools
 
 ### Bing Webmaster data
 
@@ -63,6 +64,14 @@ The fixer will not invent image descriptions, internal destination URLs, facts, 
 - `bing_get_url_traffic_info`
 - `bing_get_page_query_stats`
 - `bing_get_url_submission_quota`
+- `bing_get_link_counts`
+- `bing_get_url_links`
+- `bing_get_keyword_stats`
+- `bing_get_related_keywords`
+- `bing_get_query_page_stats`
+- `bing_get_query_page_detail_stats`
+- `bing_get_url_info`
+- `bing_get_children_url_traffic_info`
 
 ### Live SEO/AEO scanning and fixes
 
@@ -90,9 +99,34 @@ The fixer will not invent image descriptions, internal destination URLs, facts, 
 ### Bing submissions
 
 - `bing_submit_url`
+- `bing_submit_url_batch`
 - `bing_submit_sitemap`
 
+### IndexNow
+
+- `indexnow_validate_key`
+- `indexnow_submit_url`
+- `indexnow_submit_urls`
+
+IndexNow remains separate from the Bing Webmaster API client. Its tools support `added`, `updated`, and `deleted` workflow labels. The protocol sends the changed URL, not a separate change-type field, and an accepted submission never guarantees crawling or indexing.
+
 Submission tools are marked as write actions. Audits and fix-preparation tools are read-only because they do not change the website.
+
+## Official API mapping
+
+The added Bing tools call these documented methods with their official parameters. Read tools return Bing's normalized response. The batch tool adds clearly labelled local validation, quota, success, failure, and skip results; it does not claim that Bing returned per-URL outcomes.
+
+- `bing_get_link_counts` → [`GetLinkCounts(siteUrl, page)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.getlinkcounts?view=bing-webmaster-dotnet)
+- `bing_get_url_links` → [`GetUrlLinks(siteUrl, link, page)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.geturllinks?view=bing-webmaster-dotnet)
+- `bing_get_keyword_stats` → [`GetKeywordStats(q, country, language)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.getkeywordstats?view=bing-webmaster-dotnet)
+- `bing_get_related_keywords` → [`GetRelatedKeywords(q, country, language, startDate, endDate)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.getrelatedkeywords?view=bing-webmaster-dotnet)
+- `bing_get_query_page_stats` → [`GetQueryPageStats(siteUrl, query)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.getquerypagestats?view=bing-webmaster-dotnet)
+- `bing_get_query_page_detail_stats` → [`GetQueryPageDetailStats(siteUrl, query, page)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.getquerypagedetailstats?view=bing-webmaster-dotnet)
+- `bing_get_url_info` → [`GetUrlInfo(siteUrl, url)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.geturlinfo?view=bing-webmaster-dotnet)
+- `bing_get_children_url_traffic_info` → [`GetChildrenUrlTrafficInfo(siteUrl, url, page)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.getchildrenurltrafficinfo?view=bing-webmaster-dotnet)
+- `bing_submit_url_batch` → [`SubmitUrlBatch(siteUrl, urlList)`](https://learn.microsoft.com/en-us/dotnet/api/microsoft.bing.webmaster.api.interfaces.iwebmasterapi.submiturlbatch?view=bing-webmaster-dotnet)
+
+IndexNow follows the separate [official IndexNow protocol](https://www.indexnow.org/documentation), including same-host key validation and the documented 10,000-URL POST limit.
 
 ## Honest scoring and limitations
 
@@ -128,6 +162,20 @@ The setup hides the key while you type and stores it locally with owner-only per
 `~/Library/Application Support/Codex/secrets/bing-webmaster-api-key`
 
 The webpage scanner works without a Bing API key.
+
+### Optional IndexNow setup
+
+Create an IndexNow key, save it locally, and host a UTF-8 text file named `<key>.txt` at the root of the exact site host. The file must contain only the matching key.
+
+```bash
+npm run setup-indexnow-key
+```
+
+The key is stored outside the repository at:
+
+`~/Library/Application Support/Codex/secrets/indexnow-key`
+
+The default public key-file location is `https://your-host/<key>.txt`. If you intentionally host it elsewhere on the same host, set `INDEXNOW_KEY_LOCATION` before starting Codex. A custom location limits submissions to URLs under that file's directory, as required by IndexNow.
 
 ## Connect it to Codex
 

@@ -11,7 +11,7 @@ const MAX_RETRY_DELAY_MS = 15_000;
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
   "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 " +
-  "Bing-Webmaster-AEO-MCP/2.0";
+  "Bing-Webmaster-AEO-MCP/2.1";
 
 export class WebScannerError extends Error {
   constructor(message) {
