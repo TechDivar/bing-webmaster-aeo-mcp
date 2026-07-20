@@ -5,6 +5,13 @@ import { load } from "cheerio";
 
 const MAX_PAGE_BYTES = 5 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
+const DEFAULT_RETRY_LIMIT = 2;
+const DEFAULT_SCAN_DELAY_MS = 1_250;
+const MAX_RETRY_DELAY_MS = 15_000;
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) " +
+  "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 " +
+  "Bing-Webmaster-AEO-MCP/1.2";
 
 export class WebScannerError extends Error {
   constructor(message) {
@@ -163,6 +170,32 @@ export function analyzeHtml(
         final_url: finalUrl
       })
     );
+  }
+
+  // A rate-limit, challenge, or error response is not the article. Reporting
+  // missing metadata from that response creates dangerous false positives.
+  if (status < 200 || status >= 300) {
+    const errorCount = issues.filter(issue => issue.severity === "error").length;
+    const noticeCount = issues.filter(issue => issue.severity === "notice").length;
+    return {
+      scanned_at: scannedAt,
+      requested_url: requestedUrl,
+      final_url: finalUrl,
+      http: { status, status_text: statusText, content_type: contentType },
+      summary: {
+        passed: false,
+        errors: errorCount,
+        warnings: 0,
+        notices: noticeCount,
+        total_issues: issues.length
+      },
+      issue_codes: [...new Set(issues.map(issue => issue.code))],
+      issues,
+      checks: {
+        skipped: true,
+        reason: "Semantic checks were skipped because the page did not return HTTP 2xx."
+      }
+    };
   }
 
   const titles = $("head title");
@@ -424,25 +457,59 @@ async function readHtmlBody(response) {
   return html + decoder.decode();
 }
 
-export async function scanPage(urlValue, { fetchImpl = globalThis.fetch } = {}) {
+function retryDelayMs(response, attempt) {
+  const retryAfter = response.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.min(seconds * 1_000, MAX_RETRY_DELAY_MS);
+    }
+    const retryDate = Date.parse(retryAfter);
+    if (Number.isFinite(retryDate)) {
+      return Math.min(Math.max(0, retryDate - Date.now()), MAX_RETRY_DELAY_MS);
+    }
+  }
+  return Math.min(1_000 * (2 ** attempt), MAX_RETRY_DELAY_MS);
+}
+
+const defaultSleep = milliseconds =>
+  new Promise(resolve => setTimeout(resolve, milliseconds));
+
+export async function scanPage(
+  urlValue,
+  {
+    fetchImpl = globalThis.fetch,
+    sleepImpl = defaultSleep,
+    retryLimit = DEFAULT_RETRY_LIMIT
+  } = {}
+) {
   const requested = await validatePublicUrl(urlValue);
   let current = requested;
   let response;
 
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
     await validatePublicUrl(current.href);
-    try {
-      response = await fetchImpl(current, {
-        method: "GET",
-        redirect: "manual",
-        headers: {
-          Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
-          "User-Agent": "Codex-Bing-Webmaster-MCP/1.1"
-        },
-        signal: AbortSignal.timeout(30_000)
-      });
-    } catch {
-      throw new WebScannerError(`Could not fetch the live webpage: ${current.href}`);
+    for (let attempt = 0; attempt <= retryLimit; attempt += 1) {
+      try {
+        response = await fetchImpl(current, {
+          method: "GET",
+          redirect: "manual",
+          headers: {
+            Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            "User-Agent": BROWSER_USER_AGENT
+          },
+          signal: AbortSignal.timeout(30_000)
+        });
+      } catch {
+        throw new WebScannerError(`Could not fetch the live webpage: ${current.href}`);
+      }
+
+      const shouldRetry = [429, 502, 503, 504].includes(response.status);
+      if (!shouldRetry || attempt === retryLimit) break;
+      await response.body?.cancel();
+      await sleepImpl(retryDelayMs(response, attempt));
     }
 
     if (response.status >= 300 && response.status < 400) {
@@ -475,7 +542,15 @@ export async function scanPage(urlValue, { fetchImpl = globalThis.fetch } = {}) 
   });
 }
 
-export async function scanPages(urls, { concurrency = 3 } = {}) {
+export async function scanPages(
+  urls,
+  {
+    concurrency = 1,
+    delayMs = DEFAULT_SCAN_DELAY_MS,
+    scanPageImpl = scanPage,
+    sleepImpl = defaultSleep
+  } = {}
+) {
   const uniqueUrls = [...new Set(urls)];
   const results = new Array(uniqueUrls.length);
   let nextIndex = 0;
@@ -485,8 +560,9 @@ export async function scanPages(urls, { concurrency = 3 } = {}) {
       const index = nextIndex;
       nextIndex += 1;
       const url = uniqueUrls[index];
+      if (index > 0 && delayMs > 0) await sleepImpl(delayMs);
       try {
-        results[index] = await scanPage(url);
+        results[index] = await scanPageImpl(url);
       } catch (error) {
         results[index] = {
           requested_url: url,

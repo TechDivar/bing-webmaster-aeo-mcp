@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   analyzeHtml,
   isBlockedIp,
+  scanPage,
   validatePublicUrl
 } from "../src/web-scanner.mjs";
 
@@ -101,4 +102,46 @@ test("blocks local and private network scan targets", async () => {
     validatePublicUrl("http://127.0.0.1/private"),
     /Local or private network addresses cannot be scanned/
   );
+});
+
+test("does not report article SEO defects from a non-2xx block page", () => {
+  const result = analyzeHtml(
+    `<!doctype html><html><head><title>Just a moment...</title>
+    <meta name="robots" content="noindex,nofollow"></head><body></body></html>`,
+    { ...scanContext, status: 429, statusText: "Too Many Requests" }
+  );
+
+  assert.deepEqual(result.issue_codes, ["http_status_error"]);
+  assert.equal(result.checks.skipped, true);
+  assert.equal(result.summary.total_issues, 1);
+});
+
+test("retries a rate-limited page before scanning its HTML", async () => {
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response("<html><title>Blocked</title></html>", {
+        status: 429,
+        headers: { "content-type": "text/html", "retry-after": "0" }
+      });
+    }
+    return new Response(
+      `<!doctype html><html lang="en"><head><title>Example</title>
+      <meta name="description" content="Description">
+      <link rel="canonical" href="https://8.8.8.8/page"></head>
+      <body><h1>Example</h1></body></html>`,
+      { status: 200, headers: { "content-type": "text/html" } }
+    );
+  };
+
+  const result = await scanPage("https://8.8.8.8/page", {
+    fetchImpl,
+    sleepImpl: async () => {},
+    retryLimit: 1
+  });
+
+  assert.equal(calls, 2);
+  assert.equal(result.http.status, 200);
+  assert.equal(result.summary.passed, true);
 });
