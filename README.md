@@ -1,6 +1,8 @@
 # AI Search Operations MCP for Bing Webmaster
 
-An open-source MCP server that helps marketers improve pages for human readers and AI search. It combines Bing Webmaster data, GA4 AI-traffic opportunity matching, technical SEO scanning, AI-search content audits, approval-gated WordPress fix preparation, live verification, Bing URL submission, and a separate IndexNow integration.
+An open-source, vendor-neutral MCP server that helps marketers improve pages for human readers and AI search. It combines Bing Webmaster data, GA4 AI-traffic opportunity matching, technical SEO scanning, AI-search content audits, approval-gated WordPress fix preparation, live verification, Bing URL submission, and a separate IndexNow integration.
+
+It uses the standard MCP `stdio` transport, so the same server can run in Codex, Claude Code, Cursor, VS Code, and other compatible MCP clients. Each user supplies their own credentials.
 
 No API key is stored in this repository.
 
@@ -24,7 +26,7 @@ No API key is stored in this repository.
 - Submit an approved URL, URL batch, or sitemap to Bing.
 - Validate an IndexNow key file and notify IndexNow about added, updated, or deleted URLs.
 
-## Example prompts for Codex
+## Example prompts for any MCP client
 
 > List the websites connected to my Bing Webmaster account.
 
@@ -45,15 +47,15 @@ No API key is stored in this repository.
 ## How the automated workflow works
 
 1. `aeo_audit_page` runs the full technical and AI-search audit.
-2. Codex reads the latest post through your connected WordPress MCP.
+2. Your AI client reads the latest post through a separate connected WordPress MCP.
 3. `aeo_autofix_page` applies only exact proposed replacements in memory and returns a before/after diff.
 4. The tool marks the package `approval_required: true` and does not publish.
-5. Codex shows the changes and requests approval before a WordPress write.
+5. Your AI client shows the changes and requests approval before a WordPress write.
 6. After approval, the connected WordPress MCP updates the post.
 7. `seo_recheck_page` and the AEO audits verify the public result.
 8. `bing_submit_url` or `bing_submit_url_batch` requests a fresh Bing crawl when you ask for it.
 
-The fixer will not invent image descriptions, internal destination URLs, facts, prices, or competitor claims. Codex must supply proposed wording from reviewed source material. It also requires confirmation that the WordPress theme already renders the post title as the page H1 before changing content-body H1s to H2s.
+The fixer will not invent image descriptions, internal destination URLs, facts, prices, or competitor claims. The calling AI must supply proposed wording from reviewed source material. It also requires confirmation that the WordPress theme already renders the post title as the page H1 before changing content-body H1s to H2s.
 
 ## Find high-impression, low-AI-traffic pages
 
@@ -72,6 +74,29 @@ Common GA4 page, source/referrer, and traffic column names are detected automati
 The result lists each opportunity URL, Bing impressions and clicks, Bing positions, identifiable GA4 AI traffic, the reason it was selected, and the recommended next audit. Normal search and referral traffic is ignored. You can add extra AI referral domains if your analytics uses a source that is not in the built-in list.
 
 The raw CSV is not returned or sent to Google. The MCP returns only the aggregate comparison. Bing and GA4 may cover different reporting periods, and some AI visits appear as direct, organic, or unknown traffic, so the output is an opportunity list rather than proof of total AI usage.
+
+## Choose only the modules you need
+
+All 46 tools remain enabled by default. Set `MCP_MODULES` to load a smaller toolset:
+
+| Module | What it provides |
+| --- | --- |
+| `bing` | Bing reporting, Bing submissions, and the Bing + GA4 opportunity finder |
+| `seo` | Live page scanning, rechecking, fix plans, and WordPress-ready HTML preparation |
+| `aeo` | AI readability, citation, entity, intent, schema, freshness, catalog, and multilingual audits |
+| `indexnow` | IndexNow key validation and URL notifications |
+
+Examples:
+
+```bash
+# Only Bing reporting and submission tools
+MCP_MODULES=bing npm start
+
+# Scanner and AEO audits without Bing credentials
+MCP_MODULES=seo,aeo npm start
+```
+
+Use `all`, or leave `MCP_MODULES` unset, to enable everything. An unknown module name stops startup with a clear error instead of silently hiding tools.
 
 ## The 46 MCP tools
 
@@ -190,7 +215,7 @@ The scanner therefore fetches and checks the public HTML independently. It does 
 
 ## Install
 
-You need Node.js 20 or newer, Codex, a Bing Webmaster account, and a Bing Webmaster API key.
+You need Node.js 20 or newer and any MCP client that supports local `stdio` servers. A Bing Webmaster API key is needed only for the `bing` module; the webpage scanner and AEO audits work without it.
 
 ```bash
 git clone https://github.com/TechDivar/bing-webmaster-aeo-mcp.git
@@ -199,11 +224,28 @@ npm install
 npm run setup-key
 ```
 
-The setup hides the key while you type and stores it locally with owner-only permissions at:
+The setup hides the key while you type and stores it outside the repository with owner-only permissions:
 
-`~/Library/Application Support/Codex/secrets/bing-webmaster-api-key`
+| Platform | Default private folder |
+| --- | --- |
+| macOS | `~/Library/Application Support/bing-webmaster-aeo-mcp/secrets/` |
+| Linux | `~/.config/bing-webmaster-aeo-mcp/secrets/` |
+| Windows | `%APPDATA%\bing-webmaster-aeo-mcp\secrets\` |
 
-The webpage scanner works without a Bing API key.
+Existing macOS users do not need to move a key previously saved under the Codex secrets folder; v3 keeps that location as a read-only compatibility fallback.
+
+You can also supply credentials through your MCP client's secret settings or environment:
+
+```env
+BING_WEBMASTER_API_KEY=
+BING_WEBMASTER_API_KEY_FILE=/absolute/path/to/bing-key
+INDEXNOW_KEY=
+INDEXNOW_KEY_FILE=/absolute/path/to/indexnow-key
+INDEXNOW_KEY_LOCATION=https://example.com/indexnow-key.txt
+MCP_MODULES=bing,seo,aeo,indexnow
+```
+
+Prefer the setup scripts or private key files. Never commit a populated `.env` or client configuration containing a key. `BING_WEBMASTER_MCP_CONFIG_DIR` can move the private configuration folder when needed.
 
 ### Optional IndexNow setup
 
@@ -213,13 +255,11 @@ Create an IndexNow key, save it locally, and host a UTF-8 text file named `<key>
 npm run setup-indexnow-key
 ```
 
-The key is stored outside the repository at:
+The key is stored in the same platform-specific private folder shown above. The default public key-file location is `https://your-host/<key>.txt`. If you intentionally host it elsewhere on the same host, set `INDEXNOW_KEY_LOCATION` before starting the MCP server. A custom location limits submissions to URLs under that file's directory, as required by IndexNow.
 
-`~/Library/Application Support/Codex/secrets/indexnow-key`
+## Connect it to an MCP client
 
-The default public key-file location is `https://your-host/<key>.txt`. If you intentionally host it elsewhere on the same host, set `INDEXNOW_KEY_LOCATION` before starting Codex. A custom location limits submissions to URLs under that file's directory, as required by IndexNow.
-
-## Connect it to Codex
+Use an absolute path to `src/server.mjs`. For Codex:
 
 From the repository folder, run:
 
@@ -227,7 +267,11 @@ From the repository folder, run:
 codex mcp add bing-webmaster -- node "$PWD/src/server.mjs"
 ```
 
-Restart Codex. You can then ask Codex to list the Bing sites to confirm the connection.
+Restart Codex, then ask it to list the Bing sites to confirm the connection.
+
+See [Client setup examples](docs/CLIENTS.md) for Claude Code, Cursor, VS Code, generic MCP hosts, module selection, and safe credential options.
+
+WordPress is intentionally not built into this server. Connect a separate WordPress MCP if you want an approved fix package to be published. This keeps website-writing credentials and write access separate from scanning and Bing reporting.
 
 ## Development
 

@@ -2,23 +2,29 @@
 
 ## API keys
 
-Never put a Bing Webmaster API key or IndexNow key in this repository, an issue, a prompt, a screenshot, or an MCP configuration file.
+Never put a Bing Webmaster API key or IndexNow key in this repository, an issue, a prompt, a screenshot, or a checked-in MCP configuration file.
 
-The included setup script saves the key outside the repository at:
+The setup scripts save keys outside the repository in an operating-system-specific private folder:
 
-`~/Library/Application Support/Codex/secrets/bing-webmaster-api-key`
+| Platform | Default private folder |
+| --- | --- |
+| macOS | `~/Library/Application Support/bing-webmaster-aeo-mcp/secrets/` |
+| Linux | `~/.config/bing-webmaster-aeo-mcp/secrets/` |
+| Windows | `%APPDATA%\bing-webmaster-aeo-mcp\secrets\` |
 
-The file is created with owner-only permissions. The server also redacts the key from Bing error messages.
+The files are created with owner-only permissions. Existing macOS installations may still read the previous Codex secrets path as a compatibility fallback. New keys are saved only in the neutral folder.
 
-The separate IndexNow setup stores its key at:
+Private environment settings are also supported through `BING_WEBMASTER_API_KEY`, `BING_WEBMASTER_API_KEY_FILE`, `INDEXNOW_KEY`, and `INDEXNOW_KEY_FILE`. Prefer file paths or your MCP client's secret-input feature over plain-text shared configuration.
 
-`~/Library/Application Support/Codex/secrets/indexnow-key`
+Neither secret is returned by an MCP tool. Bing errors are redacted. IndexNow submission redirects are not replayed, which prevents the secret-bearing request body from being sent to another location.
 
-Neither secret is returned by an MCP tool. IndexNow submission redirects are not replayed, which prevents the secret-bearing request body from being sent to another location.
+WordPress credentials are not accepted or stored by this repository. Publishing requires a separately configured WordPress MCP.
 
 ## Safe tool behavior
 
 - Scanning and fix preparation are read-only.
+- Loading fewer modules with `MCP_MODULES` changes the visible tool list but does not bypass validation or security checks.
+- The local server uses standard MCP `stdio`; one client starts and communicates with its own server process.
 - Bing and IndexNow submissions are marked as write actions.
 - WordPress changes should be previewed and approved before a connected WordPress MCP writes them.
 - `aeo_autofix_page` never publishes. It applies only exact unique replacements in memory, returns a diff, and keeps `approval_required` true.

@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-secret_dir="$HOME/Library/Application Support/Codex/secrets"
+if [ -n "${BING_WEBMASTER_MCP_CONFIG_DIR:-}" ]; then
+  mcp_config_root="$BING_WEBMASTER_MCP_CONFIG_DIR"
+else
+  case "$(uname -s)" in
+    Darwin*) mcp_config_root="$HOME/Library/Application Support/bing-webmaster-aeo-mcp" ;;
+    MINGW*|MSYS*|CYGWIN*) mcp_config_root="${APPDATA:-$HOME/AppData/Roaming}/bing-webmaster-aeo-mcp" ;;
+    *) mcp_config_root="${XDG_CONFIG_HOME:-$HOME/.config}/bing-webmaster-aeo-mcp" ;;
+  esac
+fi
+secret_dir="$mcp_config_root/secrets"
 secret_file="$secret_dir/indexnow-key"
 
 printf '\nIndexNow secure setup\n'
@@ -25,4 +34,4 @@ mv "$temporary_key_file" "$secret_file"
 unset indexnow_key
 trap - EXIT
 
-printf 'Key saved securely. Host the matching <key>.txt file on your site, then restart Codex.\n'
+printf 'Key saved securely. Host the matching <key>.txt file on your site, then restart your MCP client.\n'

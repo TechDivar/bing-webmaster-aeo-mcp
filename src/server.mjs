@@ -56,6 +56,10 @@ import {
   prepareAeoAutofix,
   recommendSchemas
 } from "./ai-search-auditor.mjs";
+import {
+  createModuleRegistrar,
+  resolveEnabledModules
+} from "./modules/registry.mjs";
 
 const siteUrlSchema = z
   .url()
@@ -243,14 +247,16 @@ function registerUrlReadTool(server, name, title, description, method) {
   );
 }
 
-export function createServer() {
-  const server = new McpServer(
-    { name: "bing-webmaster-aeo", version: "2.3.0" },
+export function createServer({ modules = process.env.MCP_MODULES } = {}) {
+  const enabledModules = resolveEnabledModules(modules);
+  const mcpServer = new McpServer(
+    { name: "bing-webmaster-aeo", version: "3.0.0" },
     {
       instructions:
-        "Bing tools call Bing's public Webmaster API; they do not reproduce the full dashboard URL Inspection SEO/GEO report. The AI-traffic opportunity tool compares Bing's top-page data with an aggregated GA4 CSV or aggregated GA4 rows and never requires a Google credential. IndexNow uses a separate client and local key. AI-search audits are transparent heuristics, not predictions or guarantees about citations by ChatGPT, Copilot, Google, or Bing. For AEO fixes, audit the page, read the latest post through a connected WordPress MCP, prepare an exact diff, request approval before updating WordPress, recheck the public page, then submit it when requested. Never request or reveal Bing API keys or IndexNow keys."
+        "This vendor-neutral MCP server uses the standard stdio protocol. Bing tools call Bing's public Webmaster API; they do not reproduce the full dashboard URL Inspection SEO/GEO report. The AI-traffic opportunity tool compares Bing's top-page data with an aggregated GA4 CSV or aggregated GA4 rows and never requires a Google credential. IndexNow uses a separate client and local key. AI-search audits are transparent heuristics, not predictions or guarantees about citations by ChatGPT, Copilot, Google, or Bing. For AEO fixes, audit the page, read the latest post through a separate connected WordPress MCP, prepare an exact diff, request approval before updating WordPress, recheck the public page, then submit it when requested. Never request or reveal Bing API keys or IndexNow keys."
     }
   );
+  const server = createModuleRegistrar(mcpServer, enabledModules);
 
   server.registerTool(
     "bing_list_sites",
@@ -1207,7 +1213,7 @@ export function createServer() {
     })
   );
 
-  return server;
+  return mcpServer;
 }
 
 async function main() {

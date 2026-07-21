@@ -1,7 +1,7 @@
 {
   "name": "bing-webmaster-mcp",
-  "version": "2.3.0",
-  "description": "An open-source AI Search Operations MCP for Bing Webmaster data, GA4 opportunity matching, catalog-wide AEO audits, safe WordPress fixes, verification, and URL submission.",
+  "version": "3.0.0",
+  "description": "A vendor-neutral, modular AI Search Operations MCP for Bing Webmaster data, GA4 opportunity matching, AEO audits, safe fix preparation, verification, and URL submission.",
   "private": true,
   "license": "MIT",
   "author": "TechDivar",
@@ -15,6 +15,7 @@
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "bing-webmaster",
     "aeo",
     "ai-search",
@@ -22,6 +23,9 @@
     "seo",
     "wordpress",
     "codex",
+    "claude-code",
+    "cursor",
+    "vscode",
     "marketing"
   ],
   "type": "module",
@@ -29,8 +33,8 @@
   "scripts": {
     "start": "node src/server.mjs",
     "test": "node --test",
-    "setup-key": "bash scripts/setup-key.sh",
-    "setup-indexnow-key": "bash scripts/setup-indexnow-key.sh",
+    "setup-key": "node scripts/setup-secret.mjs bing",
+    "setup-indexnow-key": "node scripts/setup-secret.mjs indexnow",
     "verify": "node scripts/verify-connection.mjs"
   },
   "engines": {

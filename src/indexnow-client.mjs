@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join, posix } from "node:path";
+import { posix } from "node:path";
 
+import {
+  credentialFileCandidates,
+  defaultCredentialPath
+} from "./config/credentials.mjs";
 import { validatePublicUrl } from "./web-scanner.mjs";
 
 const DEFAULT_ENDPOINT = "https://api.indexnow.org/indexnow";
@@ -11,14 +14,7 @@ const KEY_PATTERN = /^[A-Za-z0-9-]{8,128}$/;
 const CHANGE_TYPES = new Set(["added", "updated", "deleted"]);
 
 export const INDEXNOW_MAX_URLS_PER_REQUEST = 10_000;
-export const defaultIndexNowSecretPath = join(
-  homedir(),
-  "Library",
-  "Application Support",
-  "Codex",
-  "secrets",
-  "indexnow-key"
-);
+export const defaultIndexNowSecretPath = defaultCredentialPath("indexnow-key");
 
 export class IndexNowError extends Error {
   constructor(message, status) {
@@ -28,24 +24,36 @@ export class IndexNowError extends Error {
   }
 }
 
-export async function readIndexNowKey() {
-  const environmentKey = process.env.INDEXNOW_KEY?.trim();
+export async function readIndexNowKey({
+  env = process.env,
+  platform = process.platform,
+  home,
+  readFileImpl = readFile
+} = {}) {
+  const environmentKey = env.INDEXNOW_KEY?.trim();
   if (environmentKey) return validateKey(environmentKey);
 
-  const keyPath = process.env.INDEXNOW_KEY_FILE || defaultIndexNowSecretPath;
-  try {
-    const fileKey = (await readFile(keyPath, "utf8")).trim();
-    if (fileKey) return validateKey(fileKey);
-  } catch (error) {
-    if (error?.code !== "ENOENT") {
-      throw new IndexNowError(
-        "The IndexNow key file could not be read. Run the secure IndexNow key setup again."
-      );
+  const candidates = credentialFileCandidates("indexnow-key", {
+    explicitPath: env.INDEXNOW_KEY_FILE,
+    platform,
+    env,
+    home
+  });
+  for (const keyPath of candidates) {
+    try {
+      const fileKey = (await readFileImpl(keyPath, "utf8")).trim();
+      if (fileKey) return validateKey(fileKey);
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw new IndexNowError(
+          "The IndexNow key file could not be read. Run the secure IndexNow key setup again."
+        );
+      }
     }
   }
 
   throw new IndexNowError(
-    "IndexNow key is not configured. Run npm run setup-indexnow-key, then restart Codex."
+    "IndexNow key is not configured. Run npm run setup-indexnow-key or provide INDEXNOW_KEY, then restart your MCP client."
   );
 }
 

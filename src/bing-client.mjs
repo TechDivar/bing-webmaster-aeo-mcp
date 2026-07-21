@@ -1,7 +1,10 @@
 import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
+
+import {
+  credentialFileCandidates,
+  defaultCredentialPath
+} from "./config/credentials.mjs";
 
 const DEFAULT_BASE_URL = "https://ssl.bing.com/webmaster/api.svc/json";
 const SECRET_FILE_NAME = "bing-webmaster-api-key";
@@ -14,14 +17,7 @@ const REDACTED_KEYS = new Set([
   "clientsecret"
 ]);
 
-export const defaultSecretPath = join(
-  homedir(),
-  "Library",
-  "Application Support",
-  "Codex",
-  "secrets",
-  SECRET_FILE_NAME
-);
+export const defaultSecretPath = defaultCredentialPath(SECRET_FILE_NAME);
 
 export class BingWebmasterError extends Error {
   constructor(message, status) {
@@ -31,25 +27,37 @@ export class BingWebmasterError extends Error {
   }
 }
 
-export async function readApiKey() {
-  const environmentKey = process.env.BING_WEBMASTER_API_KEY?.trim();
+export async function readApiKey({
+  env = process.env,
+  platform = process.platform,
+  home,
+  readFileImpl = readFile
+} = {}) {
+  const environmentKey = env.BING_WEBMASTER_API_KEY?.trim();
   if (environmentKey) return environmentKey;
 
-  const keyPath = process.env.BING_WEBMASTER_API_KEY_FILE || defaultSecretPath;
+  const candidates = credentialFileCandidates(SECRET_FILE_NAME, {
+    explicitPath: env.BING_WEBMASTER_API_KEY_FILE,
+    platform,
+    env,
+    home
+  });
 
-  try {
-    const fileKey = (await readFile(keyPath, "utf8")).trim();
-    if (fileKey) return fileKey;
-  } catch (error) {
-    if (error?.code !== "ENOENT") {
-      throw new BingWebmasterError(
-        "The Bing API key file could not be read. Run the secure key setup again."
-      );
+  for (const keyPath of candidates) {
+    try {
+      const fileKey = (await readFileImpl(keyPath, "utf8")).trim();
+      if (fileKey) return fileKey;
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw new BingWebmasterError(
+          "The Bing API key file could not be read. Run the secure key setup again."
+        );
+      }
     }
   }
 
   throw new BingWebmasterError(
-    "Bing API key is not configured. Run scripts/setup-key.command, enter the key, and restart Codex."
+    "Bing API key is not configured. Run npm run setup-key or provide BING_WEBMASTER_API_KEY, then restart your MCP client."
   );
 }
 
